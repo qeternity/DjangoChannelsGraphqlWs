@@ -205,7 +205,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
         # remember current eventloop so we can check it further in
         # `_assert_thread` method.
-        self._eventloop = asyncio.get_running_loop()
+        self._eventloop = asyncio.get_event_loop()
 
         # Crafty weak collection with per-operation locks. It holds a
         # mapping from the operaion id (protocol message id) to the
@@ -921,14 +921,14 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                 # the `channels.db.database_sync_to_async`.
                 django.db.close_old_connections()
 
-        return await asyncio.get_running_loop().run_in_executor(
+        return await asyncio.get_event_loop().run_in_executor(
             self._workers, thread_func
         )
 
     def _assert_thread(self):
         """Assert called from our thread with the eventloop."""
 
-        assert asyncio.get_running_loop() == self._eventloop, (
+        assert asyncio.get_event_loop() == self._eventloop, (
             "Function is called from an inappropriate thread! This"
             " function must be called from the thread where the"
             " eventloop serving the consumer is running."

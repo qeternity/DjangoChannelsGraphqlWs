@@ -30,3 +30,7 @@ from .client import GraphqlWsClient, GraphqlWsResponseError
 from .graphql_ws_consumer import GraphqlWsConsumer
 from .subscription import Subscription
 from .transport import GraphqlWsTransportAiohttp
+
+# Monkeypatch asyncio shortcut
+import asyncio
+asyncio.create_task = lambda coro: asyncio.get_event_loop().create_task(coro)
