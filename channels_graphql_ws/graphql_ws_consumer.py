@@ -45,7 +45,7 @@ import functools
 import logging
 import traceback
 import types
-from typing import Callable, List, Sequence
+from typing import Any, Callable, Dict, List, Optional, Sequence
 import weakref
 
 import asgiref.sync
@@ -111,10 +111,8 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
     subscription_confirmation_message = {"data": None, "errors": None}
 
     # The maximum number of threads designated for GraphQL requests
-    # processing. `None` means that default value is used. According to
-    # the Python documentation it is "the number of processors on the
-    # machine, multiplied by 5". See the `ThreadPoolExecutor` docs for
-    # details:
+    # processing. `None` means that default value is used. Default
+    # value depends on the Python version, check its documentation:
     # https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.ThreadPoolExecutor
     max_worker_threads = None
 
@@ -203,9 +201,9 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         # We use weak collection so finished task will be autoremoved.
         self._background_tasks = weakref.WeakSet()
 
-        # remember current eventloop so we can check it further in
+        # Remember current eventloop so we can check it further in
         # `_assert_thread` method.
-        self._eventloop = asyncio.get_running_loop()
+        self._eventloop = asyncio.get_event_loop()
 
         # Crafty weak collection with per-operation locks. It holds a
         # mapping from the operaion id (protocol message id) to the
@@ -349,10 +347,11 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             task = on_stop()
 
         else:
+            error_msg = f"Message of unknown type '{msg_type}' received!"
             task = self._send_gql_error(
-                content["id"] if "id" in content else -1,
-                f"Message of unknown type '{msg_type}' received!",
+                content["id"] if "id" in content else -1, error_msg,
             )
+            LOG.warning("GraphQL WS Client error: %s", error_msg)
 
         # If strict ordering is required then simply wait until the
         # message processing is finished. Otherwise spawn a task so
@@ -478,7 +477,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             # Notify subclass a new client is connected.
             await self.on_connect(payload)
         except Exception as ex:  # pylint: disable=broad-except
-            await self._send_gql_connection_error(self._format_error(ex))
+            await self._send_gql_connection_error(ex)
             # Close the connection.
             # NOTE: We use the 4000 code because there are two reasons:
             # A) We can not use codes greater than 1000 and less than
@@ -489,6 +488,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             # So mozilla offers us the following codes:
             # 4000–4999 - Available for use by applications.
             await self.close(code=4000)
+            LOG.error(str(ex))
         else:
             # Send CONNECTION_ACK message.
             await self._send_gql_connection_ack()
@@ -502,7 +502,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                         await asyncio.sleep(self.send_keepalive_every)
                         await self._send_gql_connection_keep_alive()
 
-                self._keepalive_task = asyncio.create_task(keepalive_sender())
+                self._keepalive_task = asyncio.ensure_future(keepalive_sender())
                 # Immediately send keepalive message cause it is
                 # required by the protocol description.
                 await self._send_gql_connection_keep_alive()
@@ -567,6 +567,9 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                 handler `Subscription._subscribe` and hack it's `root`
                 to deliver the subscription registration function.
                 """
+
+                # Avoid circular imports with local import.
+                # pylint: disable=import-outside-toplevel
                 from .subscription import Subscription
 
                 # We do not expose `Subscription._subscribe` because
@@ -722,7 +725,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
         # Enqueue the `publish` method execution. But do not notify
         # clients when `publish` returns `SKIP`.
-        stream = trigger.map(publish_callback).filter(
+        stream = trigger.map(publish_callback).filter(  # pylint: disable=no-member
             lambda publish_returned: publish_returned is not self.SKIP
         )
 
@@ -807,21 +810,43 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         self._assert_thread()
         await self.send_json({"type": "connection_ack"})
 
-    async def _send_gql_connection_error(self, error):
+    async def _send_gql_connection_error(self, error: Exception):
         """Connection error sent in reply to the `connection_init`."""
         self._assert_thread()
-        await self.send_json({"type": "connection_error", "payload": error})
+        await self.send_json(
+            {"type": "connection_error", "payload": self._format_error(error)}
+        )
 
-    async def _send_gql_data(self, operation_id, data, errors):
+    async def _send_gql_data(
+        self, operation_id, data: dict, errors: Optional[Sequence[Exception]]
+    ):
         """Send GraphQL `data` message to the client.
 
         Args:
             data: Dict with GraphQL query response.
-            errors: List with exceptions occurred during processing the
-                GraphQL query. (Errors happened in the resolvers.)
+            errors: List of exceptions occurred during processing the
+                GraphQL query. (Errors happened in resolvers.)
 
         """
         self._assert_thread()
+        # Log errors with tracebacks so we can understand what happened
+        # in a failed resolver.
+        for ex in errors or []:
+            # Typical exception here is `GraphQLLocatedError` which has
+            # reference to the original error raised from a resolver.
+            tb = ex.__traceback__
+            if (
+                isinstance(ex, graphql.error.located_error.GraphQLLocatedError)
+                and ex.original_error is not None
+            ):
+                tb = ex.stack
+                ex = ex.original_error
+            LOG.error(
+                "GraphQL resolver failed on operation with id=%s:\n%s",
+                operation_id,
+                "".join(traceback.format_exception(type(ex), ex, tb)).strip(),
+            )
+
         await self.send_json(
             {
                 "type": "data",
@@ -837,7 +862,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             }
         )
 
-    async def _send_gql_error(self, operation_id, error):
+    async def _send_gql_error(self, operation_id, error: str):
         """Tell client there is a query processing error.
 
         Server sends this message upon a failing operation.
@@ -852,6 +877,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
         """
         self._assert_thread()
+        LOG.error("GraphQL query processing error: %s", error)
         await self.send_json(
             {"type": "error", "id": operation_id, "payload": {"errors": [error]}}
         )
@@ -874,11 +900,10 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
     # ------------------------------------------------------------------------ AUXILIARY
 
     @staticmethod
-    def _format_error(error):
-        """Format exception `error` to send over a network."""
-
+    def _format_error(error: Exception) -> Dict[str, Any]:
+        """Format given exception `error` to send over a network."""
         if isinstance(error, graphql.error.GraphQLError):
-            return graphql.error.format_error(error)
+            return dict(graphql.error.format_error(error))
 
         return {"message": f"{type(error).__name__}: {str(error)}"}
 
@@ -905,11 +930,19 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             """Wrap the `func` to init eventloop and to cleanup."""
             # Create an eventloop if this worker thread does not have
             # one yet. Eventually each worker will have its own
-            # eventloop for `func` can use it.
+            # eventloop so `func` can use it.
             try:
                 loop = asyncio.get_event_loop()
             except RuntimeError:
                 loop = asyncio.new_event_loop()
+                # Force the event loop of the worker thread have a
+                # single-threaded default executor, otherwise the total
+                # number of threads may (and will) grow up to the value
+                # of `default_max_workers * default_max_workers` for
+                # each `GraphqlWsConsumer` subclass!
+                loop.set_default_executor(
+                    concurrent.futures.ThreadPoolExecutor(max_workers=1)
+                )
                 asyncio.set_event_loop(loop)
 
             # Run a given function in a thread.
@@ -921,14 +954,14 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                 # the `channels.db.database_sync_to_async`.
                 django.db.close_old_connections()
 
-        return await asyncio.get_running_loop().run_in_executor(
+        return await asyncio.get_event_loop().run_in_executor(
             self._workers, thread_func
         )
 
     def _assert_thread(self):
         """Assert called from our thread with the eventloop."""
 
-        assert asyncio.get_running_loop() == self._eventloop, (
+        assert asyncio.get_event_loop() == self._eventloop, (
             "Function is called from an inappropriate thread! This"
             " function must be called from the thread where the"
             " eventloop serving the consumer is running."
@@ -944,7 +977,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             A started `asyncio.Task` instance.
 
         """
-        background_task = asyncio.create_task(awaitable)
+        background_task = asyncio.ensure_future(awaitable)
         self._background_tasks.add(background_task)
 
         return background_task

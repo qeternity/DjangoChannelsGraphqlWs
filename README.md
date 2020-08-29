@@ -1,6 +1,36 @@
+<!--
+Copyright (C) DATADVANCE, 2010-2020
+
+Permission is hereby granted, free of charge, to any person obtaining a
+copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be included
+in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+-->
+
 # Django Channels based WebSocket GraphQL server with Graphene-like subscriptions
 
-[![PyPI](https://img.shields.io/pypi/v/django-channels-graphql-ws.svg)](https://pypi.org/project/django-channels-graphql-ws/) [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/django-channels-graphql-ws.svg)](https://pypi.org/project/django-channels-graphql-ws/) [![Code style](https://img.shields.io/badge/code%20style-black-black.svg)](https://github.com/ambv/black) [![Travis CI Build Status](https://travis-ci.org/datadvance/DjangoChannelsGraphqlWs.svg?branch=master)](https://travis-ci.org/datadvance/DjangoChannelsGraphqlWs) [![PyPI - License](https://img.shields.io/pypi/l/django-channels-graphql-ws.svg)](https://github.com/datadvance/DjangoChannelsGraphqlWs/blob/master/LICENSE)
+[![PyPI](https://img.shields.io/pypi/v/django-channels-graphql-ws.svg)](https://pypi.org/project/django-channels-graphql-ws/)
+[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/django-channels-graphql-ws.svg)](https://pypi.org/project/django-channels-graphql-ws/)
+[![PyPI - Downloads](https://img.shields.io/pypi/dm/django-channels-graphql-ws)](https://pypi.org/project/django-channels-graphql-ws/)
+[![GitHub Release Date](https://img.shields.io/github/release-date/datadvance/DjangoChannelsGraphqlWs)](https://github.com/datadvance/DjangoChannelsGraphqlWs/releases)
+[![Travis CI Build Status](https://travis-ci.org/datadvance/DjangoChannelsGraphqlWs.svg?branch=master)](https://travis-ci.org/datadvance/DjangoChannelsGraphqlWs)
+[![GitHub Actions Tests](https://github.com/datadvance/DjangoChannelsGraphqlWs/workflows/Tests/badge.svg)](https://github.com/datadvance/DjangoChannelsGraphqlWs/actions?query=workflow%3ATests)
+[![Code style](https://img.shields.io/badge/code%20style-black-black.svg)](https://github.com/ambv/black)
+[![PyPI - License](https://img.shields.io/pypi/l/django-channels-graphql-ws.svg)](https://github.com/datadvance/DjangoChannelsGraphqlWs/blob/master/LICENSE)
 
 - [Django Channels based WebSocket GraphQL server with Graphene-like subscriptions](#django-channels-based-websocket-graphql-server-with-graphene-like-subscriptions)
   - [Features](#features)
@@ -12,31 +42,37 @@
     - [Execution](#execution)
     - [Context](#context)
     - [Authentication](#authentication)
-    - [The client](#the-client)
+    - [The Python client](#the-python-client)
+    - [The GraphiQL client](#the-graphiql-client)
     - [Testing](#testing)
     - [Subscription activation confirmation](#subscription-activation-confirmation)
     - [GraphQL middleware](#graphql-middleware)
   - [Alternatives](#alternatives)
   - [Development](#development)
+    - [Bootstrap](#bootstrap)
+    - [Running tests](#running-tests)
+    - [Making release](#making-release)
   - [Contributing](#contributing)
   - [Acknowledgements](#acknowledgements)
 
 ## Features
 
-- WebSocket-based GraphQL server implemented on the Django Channels.
+- WebSocket-based GraphQL server implemented on the
+  [Django Channels v2](https://github.com/django/channels).
 - WebSocket protocol is compatible with
   [Apollo GraphQL](https://github.com/apollographql) client.
-- Graphene-like subscriptions.
+- [Graphene](https://github.com/graphql-python/graphene)-like
+  subscriptions.
 - All GraphQL requests are processed concurrently (in parallel).
 - Subscription notifications delivered in the order they were issued.
-- Optional subscription activation message can be sent to a client.
-  Sometimes this is necessary to avoid race conditions on the client
-  side. Consider the case when client subscribes to some subscription
-  and immediately invokes a mutations which triggers this subscription.
-  In such case the subscription notification can be lost, cause these
-  subscription and mutation requests are processed concurrently. To
-  avoid this client shall wait for the subscription activation before
-  sending such mutation request.
+- Optional subscription activation message can be sent to a client. This
+  is useful to avoid race conditions on the client side. Consider the
+  case when client subscribes to some subscription and immediately
+  invokes a mutations which triggers this subscription. In such case the
+  subscription notification can be lost, cause these subscription and
+  mutation requests are processed concurrently. To avoid this client
+  shall wait for the subscription activation message before sending such
+  mutation request.
 - Customizable notification strategies:
     - A subscription can be put to one or many subscription groups. This
       allows to granularly notify only selected clients, or, looking
@@ -59,10 +95,12 @@
     - AIOHTTP-based client.
     - Client for unit test based on the Django Channels testing
       communicator.
+- Supported Python 3.6 and newer (tests run on 3.6, 3.7, and 3.8).
+- Works on Linux, macOS, and Windows.
 
 ## Installation
 
-```bash
+```shell
 pip install django-channels-graphql-ws
 ```
 
@@ -154,8 +192,8 @@ application = channels.routing.ProtocolTypeRouter({
 })
 ```
 
-Notify clients when some event happens using the `broadcast()`
-or `broadcast_sync()` method from the OS thread where
+Notify<sup>[﹡](#redis-layer)</sup> clients when some event happens using
+the `broadcast()` or `broadcast_sync()` method from the OS thread where
 there is no running event loop:
 
 ```python
@@ -167,8 +205,8 @@ MySubscription.broadcast(
 )
 ```
 
-Notify clients in an coroutine function using the `broadcast()`
-or `broadcast_async()` method:
+Notify<sup>[﹡](#redis-layer)</sup> clients in an coroutine function
+using the `broadcast()` or `broadcast_async()` method:
 
 ```python
 await MySubscription.broadcast(
@@ -179,12 +217,18 @@ await MySubscription.broadcast(
 )
 ```
 
+<a name="redis-layer">﹡)</a> In case you are testing your client code by
+notifying it from the Django Shell, you have to setup a
+[channel layer](https://channels.readthedocs.io/en/latest/topics/channel_layers.html#configuration)
+in order for the two instance of your application. The same applies in
+production with workers.
+
 ## Example
 
 You can find simple usage example in the [example](example/) directory.
 
 Run:
-```bash
+```shell
 cd example/
 # Initialize database.
 ./manage.py migrate
@@ -252,18 +296,22 @@ recommended to have a look the documentation of these great projects:
 The implemented WebSocket-based protocol was taken from the library
 [subscription-transport-ws](https://github.com/apollographql/subscriptions-transport-ws)
 which is used by the [Apollo GraphQL](https://github.com/apollographql).
-Check the [protocol description](https://github.com/apollographql/subscriptions-transport-ws/blob/master/PROTOCOL.md)
+Check the
+[protocol description](https://github.com/apollographql/subscriptions-transport-ws/blob/master/PROTOCOL.md)
 for details.
 
 ### Automatic Django model serialization
 
 The `Subscription.broadcast` uses Channels groups to deliver a message
-to the `Subscription`'s `publish` method. [ASGI specification](https://github.com/django/asgiref/blob/master/specs/asgi.rst#events)
+to the `Subscription`'s `publish` method.
+[ASGI specification](https://github.com/django/asgiref/blob/master/specs/asgi.rst#events)
 clearly states what can be sent over a channel, and Django models are
 not in the list. Since it is common to notify clients about Django
-models changes we manually serialize the `payload` using [MessagePack](https://github.com/msgpack/msgpack-python)
+models changes we manually serialize the `payload` using
+[MessagePack](https://github.com/msgpack/msgpack-python)
 and hack the process to automatically serialize Django models following
-the the Django's guide [Serializing Django objects](https://docs.djangoproject.com/en/dev/topics/serialization/).
+the the Django's guide
+[Serializing Django objects](https://docs.djangoproject.com/en/dev/topics/serialization/).
 
 ### Execution
 
@@ -351,11 +399,11 @@ class Login(graphene.Mutation, name="LoginPayload"):
 ```
 
 The authentication is based on the Channels authentication mechanisms.
-Check [the Channels
-documentation](https://channels.readthedocs.io/en/latest/topics/authentication.html).
+Check
+[the Channels documentation](https://channels.readthedocs.io/en/latest/topics/authentication.html).
 Also take a look at the example in the [example](example/) directory.
 
-### The client
+### The Python client
 
 There is the `GraphqlWsClient` which implements GraphQL client working
 over the WebSockets. The client needs a transport instance which
@@ -378,10 +426,17 @@ await client.finalize()
 
 See the `GraphqlWsClient` class docstring for the details.
 
+### The GraphiQL client
+
+The GraphiQL provided by Graphene doesn't connect to your GraphQL endpoint
+via WebSocket ; instead you should use a modified GraphiQL template under
+`graphene/graphiql.html` which will take precedence over the one of Graphene.
+One such modified GraphiQL is provided in the [example](example/) directory.
+
 ### Testing
 
-To test GraphQL WebSocket API read the [appropriate page in the Channels
-documentation](https://channels.readthedocs.io/en/latest/topics/testing.html).
+To test GraphQL WebSocket API read the
+[appropriate page in the Channels documentation](https://channels.readthedocs.io/en/latest/topics/testing.html).
 
 In order to simplify unit testing there is a `GraphqlWsTransport`
 implementation based on the Django Channels testing communicator:
@@ -393,8 +448,10 @@ and take a look at the [tests](/tests) to see how to use it.
 The original Apollo's protocol does not allow client to know when a
 subscription activates. This inevitably leads to the race conditions on
 the client side. Sometimes it is not that crucial, but there are cases
-when this leads to serious issues. [Here is the discussion](https://github.com/apollographql/subscriptions-transport-ws/issues/451)
-in the [`subscriptions-transport-ws`](https://github.com/apollographql/subscriptions-transport-ws)
+when this leads to serious issues.
+[Here is the discussion](https://github.com/apollographql/subscriptions-transport-ws/issues/451)
+in the
+[`subscriptions-transport-ws`](https://github.com/apollographql/subscriptions-transport-ws)
 tracker.
 
 To solve this problem, there is the `GraphqlWsConsumer` setting
@@ -413,31 +470,31 @@ with two keys `"data"` and `"errors"`. By default it is set to
 
 It is possible to inject middleware into the GraphQL operation
 processing. For that define `middleware` setting of your
+`GraphqlWsConsumer` subclass, like this:
 
 ```python
 def my_middleware(next_middleware, root, info, *args, **kwds):
-    """My custome GraphQL middleware."""
+    """My custom GraphQL middleware."""
     # Invoke next middleware.
     return next_middleware(root, info, *args, **kwds)
 
 class MyGraphqlWsConsumer(channels_graphql_ws.GraphqlWsConsumer):
     ...
     middleware = [my_middleware]
-
-
 ```
 
 For more information about GraphQL middleware please take a look at the
-[relevant section in the Graphene
-documentation](https://docs.graphene-python.org/en/latest/execution/middleware/#middleware).
+[relevant section in the Graphene documentation](https://docs.graphene-python.org/en/latest/execution/middleware/#middleware).
 
 ## Alternatives
 
 There is a [Tomáš Ehrlich](https://gist.github.com/tricoder42)
-GitHubGist [GraphQL Subscription with django-channels](https://gist.github.com/tricoder42/af3d0337c1b33d82c1b32d12bd0265ec)
+GitHubGist
+[GraphQL Subscription with django-channels](https://gist.github.com/tricoder42/af3d0337c1b33d82c1b32d12bd0265ec)
 which this implementation was initially based on.
 
-There is a promising [GraphQL WS](https://github.com/graphql-python/graphql-ws)
+There is a promising
+[GraphQL WS](https://github.com/graphql-python/graphql-ws)
 library by the Graphene authors. In particular
 [this pull request](https://github.com/graphql-python/graphql-ws/pull/9)
 gives a hope that there will be native Graphene implementation of the
@@ -445,17 +502,52 @@ WebSocket transport with subscriptions one day.
 
 ## Development
 
-Just a reminder of how to setup an environment for the development:
+### Bootstrap
 
-```bash
-> python3 -m venv .venv
-> direnv allow
-> pip install --upgrade pip
-> pip install poetry
-> poetry install
-> pre-commit install
-> pytest
-```
+_A reminder of how to setup an environment for the development._
+
+1. Install PyEnv to be able to work with many Python versions at once
+   [PyEnv→Installation](https://github.com/pyenv/pyenv#installation).
+2. Install Python versions needed:
+   ```shell
+   $ pyenv local | xargs -L1 pyenv install
+   ```
+3. Install Poetry to the system Python.
+   ```shell
+   $ curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/master/get-poetry.py | python
+   ```
+   It is important to install Poetry into the system Python, NOT in your
+   virtual environment. For details see Poetry docs: https://python-poetry.org/docs/#installation
+4. Create local virtualenv in `.venv`, install all project dependencies
+   (from `pyproject.toml`) except the project itself.
+   ```shell
+   $ poetry install --no-root
+   ```
+5. Activate virtualenv
+   There are options:
+   - With Poetry:
+     ```shell
+     $ poetry shell
+     ```
+   - Using DirEnv:
+     ```shell
+     $ direnv allow && cd .. && cd -
+     ```
+   - Manually:
+     ```shell
+     $ source .venv/bin/activate
+     ```
+   - With VS Code: Choose `.venv` with "Python: Select interpreter" and
+     reopen the terminal.
+   ```
+6. Upgrade Pip:
+   ```shell
+   $ pip install --upgrade pip
+   ```
+7. Install pre-commit hooks to check code style automatically:
+   ```shell
+   $ pre-commit install
+   ```
 
 Use:
 
@@ -464,6 +556,41 @@ Use:
 )](
     https://github.com/ambv/black
 )
+
+### Running tests
+
+_A reminder of how to run tests._
+
+- Run all tests on all supported Python versions:
+   ```shell
+   $ tox
+   ```
+- Run all tests on a single Python version, e.g on Python 3.7:
+   ```shell
+   $ tox -e py37
+   ```
+- Example of running a single test:
+   ```shell
+   $ tox -e py36 -- tests/test_basic.py::test_main_usecase
+   ```
+- Running on currently active Python directly with Pytest:
+   ```shell
+   $ poetry run pytest
+   ```
+
+### Making release
+
+_A reminder of how to make and publish a new release._
+
+1. Update version: `poetry version minor`.
+2. Update [CHANGELOG.md](./CHANGELOG.md).
+3. Update [README.md](./README.md) (if needed).
+4. Commit changes made above.
+5. Git tag: `git tag vX.X.X && git push --tags`.
+6. Publish release to PyPI: `poetry publish --build`.
+7. Update
+   [release notes](https://github.com/datadvance/DjangoChannelsGraphqlWs/releases)
+   on GitHub.
 
 ## Contributing
 

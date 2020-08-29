@@ -19,24 +19,35 @@
 # TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-# PyDocStyle configuration.
-# http://www.pydocstyle.org/en/latest/usage.html#available-options
+# GitHub Actions configuration to run Pytest on different Python versions.
 
-[pydocstyle]
+name: Tests
 
-# Redefine match rules, cause by default it skips `test_*` files.
-match=.*\.py
+on:
+    push:
+        branches: [master]
+    pull_request:
+        branches: [master]
 
-# Disable some checks.
-#
-# D202: No blank lines allowed after function docstring.
-#     We cannot follow this, cause Black inject blank line before
-#     function declaration and if it is a nested function when this
-#     violates this rule.
-# D401: First line should be in imperative mood; try rephrasing.
-#     Often it is not possible. Especially for callback functions such
-#     as "A new message handler."
-# D403: First word of the first line should be properly capitalized.
-#     There is nothing bad in using words like "WebSocket" or
-#     "MessagePack" even in the beginning of the docstring.
-add_ignore=D202,D401,D403
+jobs:
+    build:
+        runs-on: ubuntu-latest
+        strategy:
+            matrix:
+                python-version: [3.6, 3.7, 3.8]
+        steps:
+            - uses: actions/checkout@v2
+            - name: Set up Python ${{ matrix.python-version }}
+              uses: actions/setup-python@v1
+              with:
+                  python-version: ${{ matrix.python-version }}
+            - name: Install Poetry
+              run: |
+                  python -m pip install --upgrade pip
+                  pip install poetry
+            - name: Install dependencies
+              run: |
+                  poetry install
+            - name: Test with Pytest
+              run: |
+                  poetry run pytest

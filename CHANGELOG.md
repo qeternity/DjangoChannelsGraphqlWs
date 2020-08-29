@@ -1,21 +1,89 @@
+<!--
+Copyright (C) DATADVANCE, 2010-2020
+
+Permission is hereby granted, free of charge, to any person obtaining a
+copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be included
+in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+-->
 
 # Changelog
 
-## [0.4.2] - 2010-08-23
+## [0.7.4] - 2020-07-27
 
-### Added
+- Client method 'execute' consumes 'complete' message in case of error.
+
+## [0.7.3] - 2020-07-26
+
+- Logging slightly improved. Thanks to @edouardtheron.
+
+## [0.7.2] - 2020-07-26
+
+- Quadratic growth of threads number has stopped. The problem was
+  observer on Python 3.6 and 3.7 and was not on 3.8, because starting
+  with 3.8 `ThreadPoolExecutor` does not spawn new thread if there are
+  idle threads in the pool already. The issue was in the fact that for
+  each of worker thread we run an event loop which default executor is
+  the `ThreadPoolExecutor` with default (by Python) number of threads.
+  All this eventually ended up in hundreds of thread created for each
+  `GraphqlWsConsumer` subclass.
+
+## [0.7.1] - 2020-07-25
+
+- Python 3.6 compatibility brought back.
+
+## [0.7.0] - 2020-07-25
+
+- Subscription `payload` now properly serializes the following Python
+  `datetime` types:
+  - `datetime.datetime`
+  - `datetime.date`
+  - `datetime.time`
+
+## [0.6.0] - 2020-07-25
+
+- Allow `msgpack v1.*` in the dependencies requirements.
+- Windows support improved: tests fixed, example fixed.
+- Development instructions updated in the `README.md`.
+- Removed `graphql-core` version lock, it is hold by `graphene` anyway.
+- Many CI-related fixes.
+
+## [0.5.0] - 2020-04-05
+
+- Added support for Python 3.6.
+- Dependencies updated and relaxed, now Django 3 is allowed.
+- Testing framework improved to run on 3.6, 3.7, 3.8 with Tox.
+- Client setup documentation (Python, GraphiQL) improved. Thanks to
+  Rigel Kent.
+- Error logging added to simplify debugging, error messages improved.
+- Fixed wrong year in this changelog (facepalm).
+- Configuration management made slightly simple.
+- Bandit linter removed as useless.
+- More instructions for the package developers in the `README.md` added.
+
+## [0.4.2] - 2019-08-23
 
 - Example improved to show how to handle HTTP auth (#23).
 
-## [0.4.1] - 2010-08-20
-
-### Changed
+## [0.4.1] - 2019-08-20
 
 - Better error message when Channels channel layer is not available.
 
-## [0.4.0] - 2010-08-20
-
-### Changed
+## [0.4.0] - 2019-08-20
 
 - Context (`info.context` in resolvers) lifetime has changed. It is now
   an object-like wrapper around [Channels
@@ -28,14 +96,9 @@
 
 ## [0.3.0] - 2019-08-17
 
-### Added
-
-- Support for GraphQL middleware, look at the
+- Added support for GraphQL middleware, look at the
   `GraphqlWsConsumer.middleware` setting.
 - Example reworked to illustrate how to authenticate clients.
-
-### Changed
-
 - Channels `scope` is now stored in `info.context.scope` as `dict`.
   (Previously `info.context` was a copy of `scope` wrapped into the
   `types.SimpleNamespace`). The thing is the GraphQL `info.context` and
@@ -46,16 +109,8 @@
 
 ## [0.2.1] - 2019-08-14
 
-### Added
-
 - Changelog eventually added.
-
-### Changed
-
 - `GraphqlWsClient` transport timeout increased 5->60 seconds.
-
-### Fixed
-
 - Dependency problem fixed, version numbers frozen in `poetry.lock` file
   for non-development dependencies.
 - Tests which failed occasionally due to wrong DB misconfiguration.

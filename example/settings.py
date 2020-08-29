@@ -25,9 +25,42 @@
 # This is super-minimal configuration which is just enough for unit
 # tests and to illustrate main principles in the `example.py`.
 
+import asyncio
 import pathlib
+import sys
 from typing import List
 import uuid
+
+
+# NOTE: On Windows with Python 3.8 enable selector back (default seems
+# to be changed in Python 3.8), otherwise we get `NotImplementedError`
+# which callstack goes to the import of the `daphne.server` module:
+# ```
+# ...
+# File "...\channels\apps.py", line 6, in <module>
+#   import daphne.server
+# File "...\daphne\server.py", line 20, in <module>
+#   asyncioreactor.install(twisted_loop)
+# File "...\twisted\internet\asyncioreactor.py", line 320, in install
+#   reactor = AsyncioSelectorReactor(eventloop)
+# File "...\twisted\internet\asyncioreactor.py", line 69, in __init__
+#   super().__init__()
+# File "...\twisted\internet\base.py", line 571, in __init__
+#   self.installWaker()
+# File "...\twisted\internet\posixbase.py", line 286, in installWaker
+#   self.addReader(self.waker)
+# File "...\twisted\internet\asyncioreactor.py", line 151, in addReader
+#   self._asyncioEventloop.add_reader(fd, callWithLogger, reader,
+# File "C:\Python38\lib\asyncio\events.py", line 501, in add_reader
+#   raise NotImplementedError
+# ```
+# NOTE: Actually this is already done in the `event_loop` fixture in the
+# `conftest.py` file, but this file imports earlier by the Pytest plugin
+# `pytest_django`. So we do this here as well.
+if sys.platform == "win32" and sys.version_info.minor >= 8:
+    asyncio.set_event_loop_policy(
+        asyncio.WindowsSelectorEventLoopPolicy()  # pylint: disable=no-member
+    )
 
 
 BASE_DIR = pathlib.Path(__file__).absolute().parent.parent

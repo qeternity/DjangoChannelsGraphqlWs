@@ -167,7 +167,7 @@ class Subscription(graphene.ObjectType):
 
         """
         try:
-            event_loop = asyncio.get_running_loop()
+            event_loop = asyncio.get_event_loop()
         except RuntimeError:
             pass
         else:
@@ -240,7 +240,7 @@ class Subscription(graphene.ObjectType):
 
         """
         try:
-            event_loop = asyncio.get_running_loop()
+            event_loop = asyncio.get_event_loop()
         except RuntimeError:
             pass
         else:
@@ -457,13 +457,20 @@ class Subscription(graphene.ObjectType):
             frame = inspect.currentframe()
             if frame is None:
                 return False
-            # pylint: disable=no-member
             coroutine_function_flags = (
-                inspect.CO_COROUTINE
-                | inspect.CO_ASYNC_GENERATOR
-                | inspect.CO_ITERABLE_COROUTINE
+                inspect.CO_COROUTINE  # pylint: disable=no-member
+                | inspect.CO_ASYNC_GENERATOR  # pylint: disable=no-member
+                | inspect.CO_ITERABLE_COROUTINE  # pylint: disable=no-member
             )
-            return bool(frame.f_back.f_back.f_code.co_flags & coroutine_function_flags)
+            if (
+                frame is not None
+                and frame.f_back is not None
+                and frame.f_back.f_back is not None
+            ):
+                return bool(
+                    frame.f_back.f_back.f_code.co_flags & coroutine_function_flags
+                )
+            return False
         finally:
             del frame
 
